@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const app = express();
 const dotenv = require('dotenv');
@@ -6,8 +7,12 @@ const port = 5000;
 
 dotenv.config({ path: './config.env' });
 require('./DB/connection');
-
 app.use(express.json());
+
+
+app.use("/",(req,res)=>{
+  res.json({msg:"welcometoserver"})
+})
 
 // Define CORS options
 // const corsOptions = {
@@ -22,6 +27,6 @@ app.use(cors());
 
 app.use('/api', require('./Router/auth.js'));
 
-app.listen(port, () => {
-  console.log(`Server is running at localhost:${port}`);
+app.listen(process.env.PORT, () => {
+  console.log(`Server is running at localhost:${process.env.PORT}`);
 });
