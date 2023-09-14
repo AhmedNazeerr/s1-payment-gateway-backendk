@@ -9,6 +9,7 @@ const Tx = require("ethereumjs-tx");
 const Web3 = require("web3");
 const ethereumjsutil = require("ethereumjs-util");
 const qrcode = require("qrcode");
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 // const ethers =  require('ethers');
 // import { ethers } from "ethers";
 
@@ -316,62 +317,16 @@ app.use(express.static("public")); // Serve static files from the 'public' direc
 
 const generateRandomString = () => Math.random().toString(36).substring(7);
 
-// Generate an Ethereum address and payment link
-// Routers.post(`/generate-payment-link/:id`, async (req, res) => {
-//   const { amount, currency, note } = req.body;
-//   try {
-//     const user = await User.findById({_id:req.params.id});
-//     var wallet = Wallet["default"].generate();
-//     console.log("InPaymentLink:")
-//     const paymentLink = {
-//       uniqueid: Math.random().toString(36).substring(7),
-//       address: wallet.getAddressString(),
-//       createdat:new Date(),
-//       privateKey: wallet.getPrivateKeyString(),
-//       amount,
-//       currency,
-//       note,
-//     };
-//     const randomEndpoint =
-//       "/endpoint" + Math.random().toString(36).substring(7);
-//     user.paymentLinks.push(paymentLink);
-//     console.log("Generated Payment Link:", paymentLink);
-
-//     // Generate QR code with wallet address
-//     qrcode.toDataURL(paymentLink.address, (err, qrCodeData) => {
-//       if (err) {
-//         console.error("Error generating QR code:", err);
-//         res.status(500).json({ error: "Error generating QR code." });
-//       } else {
-//         // Store the QR code URL in the user's paymentLinks.qrCode field
-//         paymentLink.qrCode = qrCodeData;
-//         user
-//           .save()
-//           .then(() => {
-//            return res.status(200).json(user);
-//           })
-//           .catch((error) => {
-//             console.error("Error saving user:", error);
-//            return  res.status(500).json({ msg: "Error saving user." });
-//           });
-//       }
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(500).json({ msg: "creating error while reading a single user" });
-//   }
-// });
 
 
 
-// Helper function to generate a payment link
 const generatePaymentLink = async (req, res) => {
   try {
     const { amount, currency, note } = req.body;
     const user = await User.findById(req.params.id);
 
     if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      return res.status(404).json({ msg: 'User not found' });
     }
 
     const wallet = Wallet.default.generate();
@@ -389,15 +344,50 @@ const generatePaymentLink = async (req, res) => {
     const randomEndpoint = `/endpoint${generateRandomString()}`;
     user.paymentLinks.push(paymentLink);
 
-    const qrCodeData = await util.promisify(qrcode.toDataURL)(paymentLink.address);
+    const qrCodeData = await generateQRCode(paymentLink.address);
     paymentLink.qrCode = qrCodeData;
+    console.log(paymentLink.qrCode)
     await user.save();
     res.status(200).json(user);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ msg: "Error generating payment link" });
+    res.status(500).json({ msg: 'Error generating payment link' });
   }
 };
+
+// Helper function to generate QR code in a worker thread
+const generateQRCode = async (address) => {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { address },
+    });
+
+    worker.on('message', (qrCodeData) => {
+      resolve(qrCodeData);
+    });
+
+    worker.on('error', (error) => {
+      reject(error);
+    });
+
+    worker.postMessage('generateQRCode');
+  });
+};
+
+// Handle messages from the worker thread
+if (!isMainThread) {
+  parentPort.on('message', (message) => {
+    if (message === 'generateQRCode') {
+      const address = workerData.address;
+      qrcode.toDataURL(address, (err, qrCodeData) => {
+        if (err) {
+          throw err;
+        }
+        parentPort.postMessage(qrCodeData);
+      });
+    }
+  });
+}
 
 // Route for generating a payment link
 Routers.post(`/generate-payment-link/:id`, generatePaymentLink);
