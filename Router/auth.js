@@ -4,6 +4,7 @@ const User = require("../Modles/User");
 const { v4: uuidv4 } = require("uuid"); // For generating unique IDs
 const bodyParser = require("body-parser");
 const Wallet = require("ethereumjs-wallet");
+const util = require('util');
 const Tx = require("ethereumjs-tx");
 const Web3 = require("web3");
 const ethereumjsutil = require("ethereumjs-util");
@@ -22,7 +23,7 @@ Routers.post("/Registration", async (req, res) => {
     }
     const userExist = await User.findOne({ email: email });
     if (userExist) {
-      return res.status(422).json({ error: "Email already exists" });
+      return res.status(422).json({ message: "Email already exists" });
     }
     const user = new User({ Name, email, password });
     await user.save();
@@ -112,80 +113,11 @@ Routers.get(`/PaymentLinkGenerator/gett/:id/:amd`, async (request, response) => 
 });
 
 
-async function withdrawFunds(idss,address,amount,privateKeys) {
+async function withdrawFunds(idss,uniqueId,address,amount,privateKeys) {
   const  id = idss;
    
   console.log("withdrawFunds ",address,amount,privateKeys);
      console.log("withdrawFunds");
-
-    //  const quicknodeUrl = "https://alpha-quaint-night.bsc-testnet.discover.quiknode.pro/3bae5ff989475ed8f9507d97c304b336e837119e/";
-    //  const web3 = new Web3(quicknodeUrl);
-     
-    //  const senderAddress = "0xd6f000c3ef92fe33aca05038003f2d51ca66ca06";
-    //  const recipientAddress = "0xF24D9E7C825d00A756d542cBE8199c5f14bA1575";
-    //  const privateKey = "0xa2e659efddc2bde9e615e9cdaa7d8e011d7c38696afde6243c3d8c32e307fe81";
-     
-    //  web3.eth.getBalance(senderAddress)
-    //    .then(balance => {
-    //      // Convert the balance to a BigNumber
-    //      const maxAmount = web3.utils.toBN(balance);
-     
-    //      console.log("Balance is ", balance);
-    //      const etherBalance = web3.utils.fromWei(maxAmount, "ether");
-    //      console.log("etherBalance", etherBalance);
-     
-    //      // Calculate the gas price you want to use (in Wei)
-    //      const gasPriceWei = web3.utils.toWei("10", "gwei"); // Adjust this as needed
-     
-    //      // Calculate the maximum gas you can afford based on the balance and gas price
-    //      const maxGas = maxAmount.div(web3.utils.toBN(gasPriceWei));
-    //      const gasLimit = maxGas.toNumber(); // Convert to a number
-     
-    //      // Calculate the amount to send after deducting gas fees
-    //      const gasFee = maxGas.mul(web3.utils.toBN(gasPriceWei));
-    //      const amountToSend = maxAmount.sub(gasFee);
-     
-    //      // Construct the transaction object
-    //      const transactionObject = {
-    //        to: recipientAddress,
-    //        value: amountToSend, // Subtract gas fee from the total amount
-    //        gas: gasLimit, // Set the gas limit based on available balance and gas price
-    //        gasPrice: gasPriceWei,
-    //      };
-     
-    //      console.log("transactionObject ", transactionObject);
-     
-    //      // Check if the transaction is already pending or included in a block
-    //      web3.eth.getTransactionCount(senderAddress)
-    //        .then(nonce => {
-    //          transactionObject.nonce = nonce;
-     
-    //          // Sign and send the transaction
-    //          web3.eth.accounts.signTransaction(transactionObject, privateKey)
-    //            .then(signedTx => {
-    //              web3.eth.sendSignedTransaction(signedTx.rawTransaction)
-    //                .on('transactionHash', txHash => {
-    //                  console.log(`Transaction Hash: ${txHash}`);
-    //                })
-    //                .on('confirmation', (confirmationNumber, receipt) => {
-    //                  console.log(`Confirmation Number: ${confirmationNumber}`);
-    //                  console.log(`Receipt:`, receipt);
-    //                })
-    //                .on('error', err => {
-    //                  console.error('Transaction Error:', err);
-    //                });
-    //            })
-    //            .catch(err => {
-    //              console.error('Error signing the transaction:', err);
-    //            });
-    //        })
-    //        .catch(err => {
-    //          console.error('Error getting nonce:', err);
-    //        });
-    //    })
-    //    .catch(err => {
-    //      console.error('Error getting balance:', err);
-    //    });
      
     const quicknodeUrl = "https://alpha-quaint-night.bsc-testnet.discover.quiknode.pro/3bae5ff989475ed8f9507d97c304b336e837119e/";
     const web3 = new Web3(quicknodeUrl);
@@ -236,8 +168,25 @@ web3.eth.getBalance(senderAddress)
         web3.eth.accounts.signTransaction(transactionObject, privateKey)
           .then(signedTx => {
             web3.eth.sendSignedTransaction(signedTx.rawTransaction)
-              .on('transactionHash', txHash => {
+              .on('transactionHash',async txHash => {
                 console.log(`Transaction Hash: ${txHash}`);
+                
+                // Additional code you want to run when the transaction hash is created
+                // For example, update the user document
+                const user = await User.findOneAndUpdate(
+                  {
+                    _id: idss,
+                    "paymentLinks.uniqueid": uniqueId,
+                  },
+                  {
+                    $set: {
+                      "paymentLinks.$.status": "done",
+                    },
+                  },
+                  { new: true }
+                );
+                
+                console.log(`User updated: ${user}`);
               })
               .on('confirmation', (confirmationNumber, receipt) => {
                 console.log(`Confirmation Number: ${confirmationNumber}`);
@@ -262,24 +211,18 @@ web3.eth.getBalance(senderAddress)
     
 }
 
-Routers.get('/changedetails/gett/:id/:amd/:address/:amount/:privateKey', async (request, response) => {
+Routers.get('/changedetails/gett/:id/:amd/:address/:amount/:privateKey/', async (request, response) => {
   try {
     const userId = request.params.id;
     const uniqueId = request.params.amd;
-    // const param1 = request.query.param1;
     const address = request.params.address;
     const amount = request.params.amount;
     const privateKey = request.params.privateKey;
     console.log("check in bankend values ",address,amount,privateKey);
     const quicknodeUrl = "https://alpha-quaint-night.bsc-testnet.discover.quiknode.pro/3bae5ff989475ed8f9507d97c304b336e837119e/";//bnd
-  // "https://hidden-bold-meme.matic-testnet.discover.quiknode.pro/ef3fee18bef4db390dc779a7334b017972338177/";//matic
-
-    // const web31 = new Web3(quicknodeUrl);
-    // const param1 = "0x9074cac923ac38656c40d0a77aa41153b2587efa";
-    // Connect to a local Ethereum node (replace with your node URL)
+  
     const web3 = new Web3(quicknodeUrl);
 
-// Check if Web3 is connected to a node
     web3.eth.net.isListening()
     .then(() => console.log('Web3 is connected'))
     .catch((err) => console.error('Error connecting to Web3:', err));
@@ -293,20 +236,8 @@ Routers.get('/changedetails/gett/:id/:amd/:address/:amount/:privateKey', async (
         if (parseFloat(etherBalance) >= parseFloat(amount)) {
           // paymentLink.status = "Paid";
           // console.log("Funds Received:", etherBalance);
-          const user = await User.findOneAndUpdate(
-            {
-              _id: userId, // Match the ObjectId
-              "paymentLinks.uniqueid": uniqueId, // Match the paymentLink with the specified uniqueid
-            },
-            {
-              $set: {
-                "paymentLinks.$.status": "done", // Update the status of the matching paymentLink to "done"
-              },
-            },
-            { new: true } // Return the updated user document
-          );
-            
-          withdrawFunds(userId,address,amount,privateKey)
+          
+          withdrawFunds(userId,uniqueId,address,amount,privateKey)
             response.status(200).json({msg:"Its-Done"});   
         }
         else{
@@ -319,6 +250,42 @@ Routers.get('/changedetails/gett/:id/:amd/:address/:amount/:privateKey', async (
 });
 // const { QRCode } = qrcode;
 
+
+Routers.get('/GetDatabyApiKey', async (req, res) => {
+  const apiKey = req.query.id;
+  const amount = req.query.amount;
+  const currency = req.query.currency;
+  const note = "Optional";
+
+  console.log(apiKey)
+  if (!apiKey) {
+    return res.status(400).json({ msg: "Please provide an 'id' query parameter" });
+  }
+  try {
+    const user = await User.findOne({ "apiKeys.apiKey": apiKey });
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+    var wallet = Wallet["default"].generate();
+    console.log("InPaymentLink:")
+    const paymentLink = {
+      uniqueid: Math.random().toString(36).substring(7),
+      address: wallet.getAddressString(),
+      createdat:new Date(),
+      privateKey: wallet.getPrivateKeyString(),
+      amount,
+      currency,
+      note,
+      status:"Pending"
+    };
+
+    user.paymentLinks.push(paymentLink);
+    await user.save();
+    return res.status(200).json({ user,paymentLink});
+  } catch (error) {
+    return res.status(500).json({ error });
+  }
+});
 const app = express();
 const port = 3001;
 
@@ -347,60 +314,123 @@ app.use(express.static("public")); // Serve static files from the 'public' direc
 //   }
 // }
 
+const generateRandomString = () => Math.random().toString(36).substring(7);
+
 // Generate an Ethereum address and payment link
-Routers.post(`/generate-payment-link/:id`, async (req, res) => {
-  const { amount, currency, note } = req.body;
+// Routers.post(`/generate-payment-link/:id`, async (req, res) => {
+//   const { amount, currency, note } = req.body;
+//   try {
+//     const user = await User.findById({_id:req.params.id});
+//     var wallet = Wallet["default"].generate();
+//     console.log("InPaymentLink:")
+//     const paymentLink = {
+//       uniqueid: Math.random().toString(36).substring(7),
+//       address: wallet.getAddressString(),
+//       createdat:new Date(),
+//       privateKey: wallet.getPrivateKeyString(),
+//       amount,
+//       currency,
+//       note,
+//     };
+//     const randomEndpoint =
+//       "/endpoint" + Math.random().toString(36).substring(7);
+//     user.paymentLinks.push(paymentLink);
+//     console.log("Generated Payment Link:", paymentLink);
+
+//     // Generate QR code with wallet address
+//     qrcode.toDataURL(paymentLink.address, (err, qrCodeData) => {
+//       if (err) {
+//         console.error("Error generating QR code:", err);
+//         res.status(500).json({ error: "Error generating QR code." });
+//       } else {
+//         // Store the QR code URL in the user's paymentLinks.qrCode field
+//         paymentLink.qrCode = qrCodeData;
+//         user
+//           .save()
+//           .then(() => {
+//            return res.status(200).json(user);
+//           })
+//           .catch((error) => {
+//             console.error("Error saving user:", error);
+//            return  res.status(500).json({ msg: "Error saving user." });
+//           });
+//       }
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ msg: "creating error while reading a single user" });
+//   }
+// });
+
+
+
+// Helper function to generate a payment link
+const generatePaymentLink = async (req, res) => {
   try {
+    const { amount, currency, note } = req.body;
     const user = await User.findById(req.params.id);
-    var wallet = Wallet["default"].generate();
-    console.log("InPaymentLink:")
+
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    const wallet = Wallet.default.generate();
+
     const paymentLink = {
-      uniqueid: Math.random().toString(36).substring(7),
+      uniqueid: generateRandomString(),
       address: wallet.getAddressString(),
-      createdat:new Date(),
+      createdat: new Date(),
       privateKey: wallet.getPrivateKeyString(),
       amount,
       currency,
       note,
     };
-    const randomEndpoint =
-      "/endpoint" + Math.random().toString(36).substring(7);
-    user.paymentLinks.push(paymentLink);
-    console.log("Generated Payment Link:", paymentLink);
 
-    // Generate QR code with wallet address
-    qrcode.toDataURL(paymentLink.address, (err, qrCodeData) => {
-      if (err) {
-        console.error("Error generating QR code:", err);
-        res.status(500).json({ error: "Error generating QR code." });
-      } else {
-        // Store the QR code URL in the user's paymentLinks.qrCode field
-        paymentLink.qrCode = qrCodeData;
-        user
-          .save()
-          .then(() => {
-            res.status(200).json(user);
-          })
-          .catch((error) => {
-            console.error("Error saving user:", error);
-            res.status(500).json({ msg: "Error saving user." });
-          });
-      }
-    });
+    const randomEndpoint = `/endpoint${generateRandomString()}`;
+    user.paymentLinks.push(paymentLink);
+
+    const qrCodeData = await util.promisify(qrcode.toDataURL)(paymentLink.address);
+    paymentLink.qrCode = qrCodeData;
+    await user.save();
+    res.status(200).json(user);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ msg: "error while reading a single user" });
+    res.status(500).json({ msg: "Error generating payment link" });
   }
-});
+};
+
+// Route for generating a payment link
+Routers.post(`/generate-payment-link/:id`, generatePaymentLink);
+
+// Routers.get("/v1/getpaymentid/:id", async (req, res) => {
+//   try {
+//     const user = await User.findOne({
+//       _id: req.params.id, // Match the ObjectId
+//     });
+//     if (user && user.paymentLinks.length > 0) {
+//       const uniqueids = user.paymentLinks.map((link) => link);
+//       console.log({uniqueids});
+//      return res.status(200).json(uniqueids);
+//     } else {
+//       // User not found or no payment links
+//       return res.status(404).json({ msg: "User not found or no payment links available" });
+//     }
+//   } catch (err) {
+//     console.error(err);
+//     return res
+//       .status(500)
+//       .json({ msg: "Error while getting user payment links" });
+//   }
+// });
+
 
 Routers.get("/v1/getpaymentid/:id", async (req, res) => {
   try {
-    const user = await User.findOne({
-      _id: req.params.id, // Match the ObjectId
-    });
+    const user = await User.findById(req.params.id);
+
     if (user && user.paymentLinks.length > 0) {
-      const uniqueids = user.paymentLinks.map((link) => link);
-      console.log({uniqueids});
+      const uniqueids = user.paymentLinks.map((link) => link.uniqueid);
+      console.log({ uniqueids });
       res.status(200).json(uniqueids);
     } else {
       // User not found or no payment links
@@ -408,63 +438,10 @@ Routers.get("/v1/getpaymentid/:id", async (req, res) => {
     }
   } catch (err) {
     console.error(err);
-    return res
-      .status(500)
-      .json({ msg: "Error while reading a single user" });
+    res.status(500).json({ msg: "Error getting user payment links" });
   }
 });
 
-
-// Withdraw funds from a payment link to a specified address
-// app.post("/api/withdraw-funds/:id", async (req, res) => {
-//   const { id } = req.params;
-//   const { toAddress } = req.body;
-
-//   const paymentLink = paymentLinks.find((link) => link.id === id);
-
-//   if (!paymentLink) {
-//     console.log("Payment Link not found.");
-//     return res.status(404).json({ error: "Payment link not found." });
-//   }
-
-//   try {
-//     const fromAddress = paymentLink.address;
-//     const privateKey = Buffer.from(paymentLink.privateKey, "hex");
-//     const amountToSend = Web3.utils.toWei(
-//       paymentLink.amount.toString(),
-//       "ether"
-//     ); // Convert amount to wei
-
-//     // Create a raw transaction
-//     const txCount = await Web3.eth.getTransactionCount(fromAddress);
-//     const txObject = {
-//       nonce: Web3.utils.toHex(txCount),
-//       to: toAddress,
-//       value: Web3.utils.toHex(amountToSend),
-//       gasLimit: Web3.utils.toHex(21000),
-//       gasPrice: Web3.utils.toHex(Web3.utils.toWei("10", "gwei")),
-//     };
-
-//     const tx = new Tx(txObject, { chain: "mumbai" });
-//     tx.sign(privateKey);
-
-//     const serializedTx = tx.serialize();
-//     const raw = "0x" + serializedTx.toString("hex");
-
-//     // Send the transaction
-//     const receipt = await web3.eth.sendSignedTransaction(raw);
-
-//     paymentLink.status = "Paid";
-
-//     console.log("Funds Withdrawn:", receipt);
-//     console.log("Updated Payment Link:", paymentLink);
-
-//     res.json({ receipt, paymentLink });
-//   } catch (error) {
-//     console.error("Error withdrawing funds:", error);
-//     res.status(500).json({ error: "Error withdrawing funds." });
-//   }
-// });
 
 // Serve static HTML file with QR code for payment link
 app.get("/payment/:id", (req, res) => {

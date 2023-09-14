@@ -8,6 +8,16 @@
   ],
   "routes": [
     {
+      "src": "/generate-payment-link/:id",
+      "dest": "app.js",
+      "methods": ["POST"],
+      "config": {
+        "function": {
+          "maxDuration": 60000 
+        }
+      }
+    },
+    {
       "src": "/(.*)",
       "dest": "app.js"
     }
